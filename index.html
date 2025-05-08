@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Test Político con Zona Horaria Local</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+  <div id="root" class="max-w-3xl mx-auto p-4"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Clave para operaciones sensibles
+    const DOWNLOAD_SECRET = "MiClaveSecreta123";
+
+    // Preguntas y configuración (20 ítems)
+    const questions = [
+      { text:"1. El Estado debería regular estrictamente los precios de productos básicos.", axis:"economic", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"2. Los impuestos a las grandes empresas deberían ser significativamente más altos.", axis:"economic", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"3. El mercado libre, sin intervención estatal, es el mejor sistema económico.", axis:"economic", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"4. El Estado debería ser propietario de industrias estratégicas (energía, telecomunicaciones).", axis:"economic", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"5. Las regulaciones laborales deberían ser mínimas para fomentar la creación de empleo.", axis:"economic", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"6. El Estado debe garantizar un ingreso básico universal.", axis:"economic", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"7. La privatización de servicios públicos generalmente mejora su eficiencia.", axis:"economic", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"8. Las pequeñas empresas deberían estar exentas de muchas regulaciones gubernamentales.", axis:"economic", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"9. El gobierno debería limitar la acumulación excesiva de riqueza mediante impuestos progresivos.", axis:"economic", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"10. Los tratados de libre comercio son beneficiosos para la economía nacional.", axis:"economic", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"11. El matrimonio igualitario debería estar legalmente reconocido.", axis:"personal", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"12. La legalización controlada de algunas drogas reduciría problemas sociales.", axis:"personal", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"13. El Estado debería regular estrictamente el contenido en internet y redes sociales.", axis:"personal", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"14. La eutanasia debería ser una opción legal bajo ciertas circunstancias.", axis:"personal", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"15. Las tradiciones culturales y religiosas deben ser protegidas incluso si limitan libertades individuales.", axis:"personal", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"16. El aborto debería ser legal y accesible.", axis:"personal", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"17. El gobierno debería poder vigilar a los ciudadanos para garantizar la seguridad nacional.", axis:"personal", weights:{A:0,B:1,C:2,D:3,E:4} },
+      { text:"18. La libertad de expresión debe protegerse incluso cuando las opiniones son controvertidas.", axis:"personal", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"19. Las políticas de acción afirmativa son necesarias para corregir desigualdades históricas.", axis:"personal", weights:{A:4,B:3,C:2,D:1,E:0} },
+      { text:"20. El servicio militar obligatorio es necesario para la defensa nacional.", axis:"personal", weights:{A:0,B:1,C:2,D:3,E:4} }
+    ];
+
+    const options = [
+      { code:"A", label:"A. Totalmente de acuerdo" },
+      { code:"B", label:"B. De acuerdo" },
+      { code:"C", label:"C. Neutral" },
+      { code:"D", label:"D. En desacuerdo" },
+      { code:"E", label:"E. Totalmente en desacuerdo" }
+    ];
+
+    const quadrants = {
+      "1":{ title:"TOTALITARISMO",   range:"LE:0–20, LP:0–20",  perfil:"Prefiere un gobierno fuerte que controle tanto la economía como aspectos sociales." },
+      "2":{ title:"CONSERVADURISMO", range:"LE:21–40, LP:0–20", perfil:"Apoya la libertad económica pero favorece control social y valores tradicionales." },
+      "3":{ title:"PROGRESISMO",     range:"LE:0–20, LP:21–40", perfil:"Defiende libertades sociales pero apoya intervención estatal en economía." },
+      "4":{ title:"LIBERALISMO",     range:"LE:21–40, LP:21–40", perfil:"Defiende tanto libertades económicas como personales." }
+    };
+
+    function PoliticalTest() {
+      const [step, setStep] = useState("info");
+      const [user, setUser] = useState({ nombre:"", email:"" });
+      const [answers, setAnswers] = useState(Array(questions.length).fill(null));
+      const canvasRef = useRef(null);
+
+      const handleAns = (i, code) => {
+        const a = [...answers]; a[i] = code; setAnswers(a);
+      };
+
+      const calcScores = () => {
+        let eco = 0, per = 0;
+        answers.forEach((sel, i) => {
+          if (!sel) return;
+          const w = questions[i].weights[sel];
+          questions[i].axis === "economic" ? eco += w : per += w;
+        });
+        return { economic: eco, personal: per };
+      };
+
+      const getQuad = (eco, per) => {
+        if (eco <= 20 && per <= 20) return "1";
+        if (eco >= 21 && per <= 20) return "2";
+        if (eco <= 20 && per >= 21) return "3";
+        if (eco >= 21 && per >= 21) return "4";
+        return null;
+      };
+
+      useEffect(() => {
+        if (step !== "results") return;
+        const { economic, personal } = calcScores();
+        const ctx = canvasRef.current.getContext("2d");
+        const w = 400, h = 400;
+        ctx.clearRect(0,0,w,h);
+        ctx.fillStyle = "#f3f4f6"; ctx.fillRect(0,0,w,h);
+        ctx.strokeStyle = "#9ca3af"; ctx.beginPath();
+        ctx.moveTo(w/2,0); ctx.lineTo(w/2,h);
+        ctx.moveTo(0,h/2); ctx.lineTo(w,h/2);
+        ctx.stroke();
+        const names = {1:"TOTALITARISMO",2:"CONSERVADURISMO",3:"PROGRESISMO",4:"LIBERALISMO"};
+        ctx.fillStyle = "#111827"; ctx.font = "bold 14px sans-serif";
+        [
+          {x:10,y:h-10,k:1,ta:"left",tb:"bottom"},
+          {x:w-10,y:h-10,k:2,ta:"right",tb:"bottom"},
+          {x:10,y:10,k:3,ta:"left",tb:"top"},
+          {x:w-10,y:10,k:4,ta:"right",tb:"top"}
+        ].forEach(p => {
+          ctx.textAlign = p.ta;
+          ctx.textBaseline = p.tb;
+          ctx.fillText(names[p.k], p.x, p.y);
+        });
+        const cx = economic - 20, cy = personal - 20;
+        const scale = (w/2) / 20;
+        const x = w/2 + cx * scale;
+        const y = h/2 - cy * scale;
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+        ctx.fillStyle = "#3b82f6";
+        ctx.fill();
+      }, [step]);
+
+      // Guarda el test en localStorage usando hora local de Bogotá
+      const saveTest = () => {
+        const { economic, personal } = calcScores();
+        const quad = getQuad(economic, personal);
+        const timestampLocal = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota" });
+        const record = {
+          timestamp: timestampLocal,
+          nombre: user.nombre,
+          email: user.email,
+          quadrant: quadrants[quad].title,
+          economic, personal
+        };
+        questions.forEach((q, i) => {
+          const sel = answers[i];
+          record[`Q${i+1}`] = sel || "";
+          record[`P${i+1}`] = sel ? q.weights[sel] : "";
+        });
+        const all = JSON.parse(localStorage.getItem("politicalTest")) || [];
+        all.push(record);
+        localStorage.setItem("politicalTest", JSON.stringify(all));
+      };
+
+      // Descarga consolidado (con contraseña)
+      const downloadAllCSV = () => {
+        const pass = prompt("Clave para descargar resultados:");
+        if (pass !== DOWNLOAD_SECRET) return alert("Acceso denegado");
+        const all = JSON.parse(localStorage.getItem("politicalTest")) || [];
+        if (!all.length) return alert("No hay datos guardados");
+        const headers = Object.keys(all[0]);
+        const rows = all.map(r => headers.map(h => r[h]).join(","));
+        const csv = [headers.join(","), ...rows].join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "consolidado_test_politico.csv"; a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      // Limpia datos (con contraseña)
+      const clearAllData = () => {
+        const pass = prompt("Clave para limpiar datos:");
+        if (pass !== DOWNLOAD_SECRET) return alert("Acceso denegado");
+        if (confirm("¿Borrar todos los resultados guardados?")) {
+          localStorage.removeItem("politicalTest");
+          window.location.reload();
+        }
+      };
+
+      // Renderizado por pasos
+      if (step === "info") {
+        return (
+          <div className="bg-white p-6 rounded shadow">
+            <h2 className="text-xl font-bold mb-4">Tus datos</h2>
+            <label className="block mb-3">
+              Nombre:
+              <input
+                type="text"
+                className="mt-1 block w-full border rounded p-2"
+                value={user.nombre}
+                onChange={e => setUser({...user, nombre: e.target.value})}
+              />
+            </label>
+            <label className="block mb-4">
+              Email:
+              <input
+                type="email"
+                className="mt-1 block w-full border rounded p-2"
+                value={user.email}
+                onChange={e => setUser({...user, email: e.target.value})}
+              />
+            </label>
+            <div className="flex space-x-4">
+              <button
+                disabled={!user.nombre || !user.email}
+                onClick={() => setStep("questions")}
+                className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                Comenzar Test
+              </button>
+              <button
+                onClick={downloadAllCSV}
+                className="bg-indigo-600 text-white px-4 py-2 rounded"
+              >
+                Descargar Consolidado
+              </button>
+              <button
+                onClick={clearAllData}
+                className="bg-red-600 text-white px-4 py-2 rounded"
+              >
+                Limpiar Datos
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (step === "questions") {
+        return (
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-xl font-bold mb-4">Preguntas</h2>
+            <progress
+              value={answers.filter(a => a).length}
+              max={questions.length}
+              className="w-full h-2 mb-6 rounded"
+            />
+            {questions.map((q, i) => (
+              <div
+                key={i}
+                className="border border-gray-200 rounded-md p-4 mb-4 hover:shadow transition-shadow"
+              >
+                <p className="text-lg font-semibold mb-2">{q.text}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {options.map(o => (
+                    <label key={o.code} className="inline-flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        className="form-radio h-5 w-5 text-blue-600"
+                        checked={answers[i] === o.code}
+                        onChange={() => handleAns(i, o.code)}
+                      />
+                      <span className="text-gray-700">{o.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div className="flex justify-end">
+              <button
+                onClick={() => { saveTest(); setStep("results"); }}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              >
+                Ver Resultados
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // Pantalla de resultados
+      const { economic, personal } = calcScores();
+      const quad = getQuad(economic, personal);
+      const info = quadrants[quad];
+
+      return (
+        <div className="bg-white p-6 rounded shadow">
+          <h2 className="text-xl font-bold mb-4">Tus Resultados</h2>
+          <canvas
+            ref={canvasRef}
+            width="400"
+            height="400"
+            className="border rounded mb-4"
+          />
+          <h3 className="text-lg font-semibold">{info.title} ({info.range})</h3>
+          <p className="italic mb-4">{info.perfil}</p>
+          <div className="flex space-x-4">
+            <button
+              onClick={downloadAllCSV}
+              className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+            >
+              Descargar Consolidado
+            </button>
+            <button
+              onClick={clearAllData}
+              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+            >
+              Limpiar Datos
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+              Reiniciar
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<PoliticalTest />);
+  </script>
+</body>
+</html>

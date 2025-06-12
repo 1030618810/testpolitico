@@ -16,6 +16,7 @@
     const { useState, useEffect, useRef } = React;
     const DOWNLOAD_SECRET = "MiClaveSecreta123";
 
+    // Definiciones anteriores de preguntas políticas, opciones y cuadrantes
     const questions = [
       { text:"1. El Estado debería regular estrictamente los precios de productos básicos.", axis:"economic", weights:{A:0,B:1,C:2,D:3,E:4} },
       { text:"2. Los impuestos a las grandes empresas deberían ser significativamente más altos.", axis:"economic", weights:{A:0,B:1,C:2,D:3,E:4} },
@@ -55,37 +56,39 @@
     };
 
     function PoliticalTest() {
-      const [step, setStep]    = useState("info");
-      const [user, setUser]    = useState({ edad:"", sexo:"", localidad:"", barrio:"" });
-      const [answers, setAns]  = useState(Array(questions.length).fill(null));
-      const chartRef           = useRef(null);
-      let radarChart           = null;
+      const [step, setStep] = useState("info");
+      const [user, setUser] = useState({});
+      const [answers, setAns] = useState(Array(questions.length).fill(null));
+      const chartRef = useRef(null);
+      const chartInstance = useRef(null);
 
       const handleAns = (i, code) => {
         const a = [...answers]; a[i] = code; setAns(a);
       };
+
       const calcScores = () => {
         let eco=0, per=0;
         answers.forEach((sel,i)=>{
           if(!sel) return;
           const w=questions[i].weights[sel];
-          questions[i].axis==="economic"? eco+=w : per+=w;
+          questions[i].axis==="economic" ? eco+=w : per+=w;
         });
-        return { economic:eco, personal:per };
+        return { economic: eco, personal: per };
       };
+
       const getQuad = (e,p) => {
-        if(e<=20&&p<=20) return "1";
-        if(e>=21&&p<=20) return "2";
-        if(e<=20&&p>=21) return "3";
-        if(e>=21&&p>=21) return "4";
+        if(e<=20 && p<=20) return "1";
+        if(e>=21 && p<=20) return "2";
+        if(e<=20 && p>=21) return "3";
+        return "4";
       };
 
       useEffect(()=>{
-        if(step!=="results") return;
+        if(step!="results") return;
         const { economic, personal } = calcScores();
-        const ctx = chartRef.current.getContext("2d");
-        if(radarChart) radarChart.destroy();
-        radarChart = new Chart(ctx, {
+        const ctx = chartRef.current.getContext('2d');
+        if(chartInstance.current) chartInstance.current.destroy();
+        chartInstance.current = new Chart(ctx, {
           type:'radar',
           data:{
             labels:['Liberalismo','Conservadurismo','Totalitarismo','Progresismo'],
@@ -99,130 +102,150 @@
               ],
               backgroundColor:'rgba(54,162,235,0.2)',
               borderColor:'rgba(54,162,235,1)',
-              pointBackgroundColor:'blue', pointRadius:6
+              pointBackgroundColor:'#1e40af', pointRadius:6
             }]
           },
           options:{
-            scales:{ r:{ angleLines:{display:true}, suggestedMin:0, suggestedMax:100,
-              ticks:{display:false}, pointLabels:{font:{size:14}} } },
-            plugins:{ legend:{display:false}, tooltip:{enabled:false}},
+            scales:{ r:{ angleLines:{display:true}, suggestedMin:0, suggestedMax:100, ticks:{display:false}, pointLabels:{font:{size:14}} } },
+            plugins:{ legend:{display:false}, tooltip:{enabled:false} },
             responsive:true, maintainAspectRatio:false
           }
         });
-      },[step]);
+      },[step, answers]);
 
       const saveTest = () => {
         const { economic, personal } = calcScores();
-        const quad = getQuad(economic,personal);
-        const record = {
-          timestamp:new Date().toLocaleString('es-CO',{timeZone:'America/Bogota'}),
-          edad:user.edad, sexo:user.sexo,
-          localidad:user.localidad, barrio:user.barrio,
-          quadrant:quadrants[quad].title, economic, personal
-        };
+        const quad = getQuad(economic, personal);
+        const record = { timestamp: new Date().toISOString(), ...user, quadrant: quadrants[quad].title, economic, personal };
         questions.forEach((q,i)=>{
-          const sel=answers[i]||"";
-          record[`Q${i+1}`]=sel;
-          record[`P${i+1}`]=sel? q.weights[sel]:0;
+          const sel = answers[i] || '';
+          record[`Q${i+1}`] = sel;
+          record[`P${i+1}`] = sel ? q.weights[sel] : 0;
         });
-        const all=JSON.parse(localStorage.getItem('politicalTest'))||[];
+        let all = [];
+        try { all = JSON.parse(localStorage.getItem('politicalTest')) || []; } catch{ all = []; }
         all.push(record);
-        localStorage.setItem('politicalTest',JSON.stringify(all));
-      };
-      const downloadAllCSV = () => {
-        const pass=prompt("Clave CSV:");
-        if(pass!==DOWNLOAD_SECRET) return alert("Acceso denegado");
-        const all=JSON.parse(localStorage.getItem('politicalTest'))||[];
-        if(!all.length) return alert("Sin datos");
-        const hdr=Object.keys(all[0]);
-        const rows=all.map(r=>hdr.map(h=>r[h]).join(','));
-        const csv=[hdr.join(','),...rows].join('\n');
-        const blob=new Blob([csv],{type:'text/csv'}), url=URL.createObjectURL(blob);
-        const a=document.createElement('a'); a.href=url; a.download='consolidado.csv'; a.click();
-        URL.revokeObjectURL(url);
-      };
-      const clearAllData = () => {
-        const pass=prompt("Clave limpiar:");
-        if(pass!==DOWNLOAD_SECRET) return alert("Acceso denegado");
-        if(confirm("¿Borrar todo?")){
-          localStorage.removeItem('politicalTest');
-          window.location.reload();
-        }
+        localStorage.setItem('politicalTest', JSON.stringify(all));
       };
 
-      // Función sin clave para PDF
+      const downloadAllCSV = () => {
+        const pass = prompt('Clave CSV:'); if(pass!==DOWNLOAD_SECRET) return alert('Acceso denegado');
+        let all = [];
+        try { all = JSON.parse(localStorage.getItem('politicalTest')) || []; } catch{};
+        if(!all.length) return alert('Sin datos');
+        const headerKeys = Object.keys(all[0]);
+        const rows = all.map(r => headerKeys.map(k=>`"${String(r[k]||'').replace(/"/g,'""')}"`).join(','));
+        const bom = '\uFEFF';
+        const csv = bom + [headerKeys.join(','), ...rows].join('\n');
+        const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download='consolidado.csv'; a.click(); URL.revokeObjectURL(url);
+      };
+
+      const clearAllData = () => {
+        const pass = prompt('Clave limpiar:'); if(pass!==DOWNLOAD_SECRET) return alert('Acceso denegado');
+        if(confirm('¿Borrar todo?')){ localStorage.removeItem('politicalTest'); window.location.reload(); }
+      };
+
       const exportPDF = () => {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         const { economic, personal } = calcScores();
         const quad = getQuad(economic, personal);
         const info = quadrants[quad];
-        doc.setFontSize(16);
-        doc.text("Resultados del Test Político",20,20);
-        doc.setFontSize(14);
-        doc.text(`${info.title} (${info.range})`,20,30);
+        doc.setFontSize(16).text('Resultados del Test Político', 20, 20);
+        doc.setFontSize(14).text(`${info.title} (${info.range})`, 20, 30);
         doc.setFontSize(12);
-        doc.text(info.perfil,20,40);
-        doc.text("Respuestas y puntajes:",20,55);
+        const lines = doc.splitTextToSize(info.perfil, 170);
+        doc.text(lines, 20, 40);
+        let y = 60;
         questions.forEach((q,i)=>{
-          const sel=answers[i], pts=sel? q.weights[sel]:0;
-          const label=sel? options.find(o=>o.code===sel).label:"Sin respuesta";
-          const y=65 + i*6;
-          doc.text(`${i+1}. ${label} (Pts: ${pts})`,20,y);
+          if(y>260){ doc.addPage(); y=20; }
+          const sel = answers[i]||'';
+          const label = sel ? options.find(o=>o.code===sel).label : 'Sin respuesta';
+          const pts = sel ? q.weights[sel] : 0;
+          const text = `${i+1}. ${label} (Pts: ${pts})`;
+          const txtLines = doc.splitTextToSize(text, 170);
+          doc.text(txtLines, 20, y);
+          y += txtLines.length * 6;
         });
         doc.addPage();
-        doc.text("Gráfico Radar",20,20);
-        const img = chartRef.current.toDataURL("image/png");
-        doc.addImage(img,"PNG",20,30,170,100);
-        doc.save("resultado_test_politico.pdf");
+        doc.text('Gráfico Radar', 20, 20);
+        const img = chartRef.current.toDataURL('image/png');
+        doc.addImage(img, 'PNG', 20, 30, 170, 100);
+        doc.save('resultado_test_politico.pdf');
       };
 
-      // RENDER
-      if(step==="info"){
+      // VISTAS
+      if(step === 'info'){
         return (
           <div className="bg-white p-6 rounded shadow">
-            <h2 className="text-2xl font-bold mb-4">Datos Iniciales</h2>
-            {['edad','sexo','localidad','barrio'].map((f,i)=>(
-              <label key={i} className="block mb-3">
-                {f.charAt(0).toUpperCase()+f.slice(1)}:
-                <input type={f==='edad'?'number':'text'}
-                  className="mt-1 block w-full border rounded p-2"
-                  value={user[f]} onChange={e=>setUser({...user,[f]:e.target.value})}/>
+            <h2 className="text-2xl font-bold mb-4">¿Dónde estás tú en el espectro político?</h2>
+	    <h2 className="text-2xl font-bold mb-4">¡Descúbrelo con este test rápido y anónimo!</h2>
+En tiempos donde la política parece dividirnos, entender nuestras ideas puede acercarnos. Este test te ayudará a ubicarte en el espectro político de una forma distinta: más allá de “izquierda” o “derecha”, explorando también tus opiniones sobre libertades personales, el rol del Estado, la economía y la justicia social.<br /><br />
+
+Además, con unas breves preguntas demográficas, podrás ver cómo personas de distintos lugares, edades y realidades piensan como tú... o no.<br /><br />
+
+🕐 Duración estimada: 5 minutos<br /><br />
+🔒 Tu información es confidencial y no se usará con fines comerciales.<br /><br />
+
+¡Anímate a responder y compártelo con tus amigos! Cuantas más voces tengamos, más rica será la conversación democrática.<br /><br />
+
+
+            {[
+              { text:'1. ¿Cuál es tu rango de edad?', key:'edad', options:["<18","18-24","25-34","35-44","45-54","55-64","65+"], labels:['Menos de 18','18-24','25-34','35-44','45-54','55-64','65+'] },
+              { text:'2. ¿Con cuál te identificas en género?', key:'sexo', options:['Mujer','Hombre','No binaria','Prefiero no decirlo','Otro'], labels:['Mujer','Hombre','Persona no binaria','Prefiero no decirlo','Otro'] },
+              { text:'3. ¿En qué ciudad vives?', key:'ciudad', options:['Bogotá','Medellín','Cali','Barranquilla','Otra'], labels:['Bogotá','Medellín','Cali','Barranquilla','Otra'] },
+              { text:'4. Si vives en Bogotá, ¿en qué localidad?', key:'localidad', options:['Antonio Nariño','Barrios Unidos','Bosa','Candelaria','Chapinero','Ciudad Bolívar','Engativá','Fontibón','Kennedy','Los Mártires','Puente Aranda','Rafael Uribe Uribe','San Cristóbal','Santa Fe','Suba','Sumapaz','Teusaquillo','Tunjuelito','Usaquén','Usme','No vivo en Bogotá'], labels:[] },
+              { text:'5. ¿Cuál es tu estrato?', key:'estrato', options:['1','2','3','4','5','6','No sé'], labels:['Estrato 1','Estrato 2','Estrato 3','Estrato 4','Estrato 5','Estrato 6','No sé / Prefiero no responder'] },
+              { text:'6. ¿Vives en una vivienda...?', key:'vivienda', options:['Propia','Familiar','Alquilada','Subsidio','Informal','Otro'], labels:['Propia','Familiar','Alquilada','En arriendo con subsidio','En arriendo informal','Otro'] },
+              { text:'7. ¿Afiliación EPS?', key:'eps', options:['Sí','No','No sé'], labels:['Sí','No','No sé / Prefiero no responder'] },
+              { text:'8. Régimen EPS', key:'regimen', options:['Subsidiado','Contributivo','No sé'], labels:['Subsidiado','Contributivo','No sé / Prefiero no responder'] },
+              { text:'9. Nivel educativo más alto', key:'educacion', options:['Primaria','Secundaria','Tecnica','Universitaria','Posgrado','No sé'], labels:['Primaria','Secundaria','Técnica/tecnológica','Universitaria','Posgrado/especialización','Prefiero no responder'] },
+              { text:'10. Ocupación actual', key:'ocupacion', options:['Estudiante','Publico','Privado','Independiente','Desempleado','Hogar','Jubilado','Otro'], labels:['Estudiante','Empleado/a público','Empleado/a privado','Independiente/emprendedor','Desempleado','Hogar/cuidados','Pensionado/jubilado','Otro'] }
+            ].map((q,i)=>(
+              <label key={i} className="block mb-4">
+                <span className="font-semibold text-gray-800">{q.text}</span>
+                <select
+                  className="mt-1 block w-full border rounded p-2 bg-white"
+                  value={user[q.key]||''}
+                  onChange={e=>setUser({...user,[q.key]:e.target.value})}
+                >
+                  <option value="">Selecciona...</option>
+                  {q.options.map((opt,j)=>(
+                    <option key={opt} value={opt}>{q.labels[j]||opt}</option>
+                  ))}
+                </select>
               </label>
             ))}
             <div className="flex gap-4">
-              <button disabled={!user.edad||!user.sexo||!user.localidad||!user.barrio}
-                onClick={()=>setStep('questions')}
-                className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">
-                Comenzar Test
-              </button>
-              <button onClick={downloadAllCSV}
-                className="bg-indigo-600 text-white px-4 py-2 rounded">
-                Descargar Consolidado
-              </button>
-              <button onClick={clearAllData}
-                className="bg-red-600 text-white px-4 py-2 rounded">
-                Limpiar Datos
-              </button>
+<button
+  disabled={!['edad','sexo','ciudad','localidad','estrato','vivienda','eps','regimen','educacion','ocupacion']
+    .every(k => user[k])}
+  className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
+  onClick={()=>setStep('questions')}
+>
+  Comenzar Test
+</button>
+              <button onClick={downloadAllCSV} className="bg-indigo-600 text-white px-4 py-2 rounded">Descargar Consolidado</button>
+              <button onClick={clearAllData} className="bg-red-600 text-white px-4 py-2 rounded">Limpiar Datos</button>
             </div>
           </div>
         );
       }
-      if(step==="questions"){
+
+      if(step==='questions'){
         return (
           <div className="bg-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-2xl font-bold mb-4">Preguntas</h2>
-            <progress value={answers.filter(a=>a).length} max={questions.length}
-                      className="w-full h-2 mb-6 rounded"/>
+            <h2 className="text-2xl font-bold mb-4">Preguntas Políticas</h2>
+            <progress value={answers.filter(a=>a).length} max={questions.length} className="w-full h-2 mb-6 rounded"/>
             {questions.map((q,i)=>(
               <div key={i} className="border p-4 mb-4 rounded-md hover:shadow">
                 <p className="font-medium mb-2">{q.text}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {options.map(o=>(
                     <label key={o.code} className="inline-flex items-center space-x-2">
-                      <input type="radio" className="form-radio h-5 w-5 text-blue-600"
-                        checked={answers[i]===o.code}
-                        onChange={()=>handleAns(i,o.code)}/>
+                      <input type="radio" className="form-radio h-5 w-5 text-blue-600" checked={answers[i]===o.code} onChange={()=>handleAns(i,o.code)}/>
                       <span>{o.label}</span>
                     </label>
                   ))}
@@ -230,42 +253,27 @@
               </div>
             ))}
             <div className="flex justify-end">
-              <button onClick={()=>{ saveTest(); setStep('results'); }}
-                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-                Ver Resultados
-              </button>
+              <button disabled={answers.filter(a=>a).length<questions.length} onClick={()=>{saveTest(); setStep('results');}} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50">Ver Resultados</button>
             </div>
           </div>
         );
       }
+
       const { economic, personal } = calcScores();
       const quad = getQuad(economic, personal);
       const info = quadrants[quad];
       return (
         <div className="bg-white p-6 rounded shadow">
           <h2 className="text-2xl font-bold mb-4">Tus Resultados</h2>
-          <div className="w-full" style={{height:'400px'}}>
-            <canvas ref={chartRef}/>
-          </div>
+          <div className="w-full" style={{height:'400px'}}><canvas ref={chartRef}/></div>
           <h3 className="text-xl font-semibold mt-4">{info.title} ({info.range})</h3>
           <p className="italic mb-4">{info.perfil}</p>
+          <p className="text-sm text-gray-600 mb-4">Puntaje Económico: {economic} / 40  •  Puntaje Personal: {personal} / 40</p>
           <div className="flex gap-4">
-            <button onClick={exportPDF}
-              className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
-              Exportar en PDF
-            </button>
-            <button onClick={downloadAllCSV}
-              className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-              Descargar Consolidado
-            </button>
-            <button onClick={clearAllData}
-              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
-              Limpiar Datos
-            </button>
-            <button onClick={()=>window.location.reload()}
-              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
-              Reiniciar
-            </button>
+            <button onClick={exportPDF} className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">Exportar en PDF</button>
+            <button onClick={downloadAllCSV} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Descargar Consolidado</button>
+            <button onClick={clearAllData} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Limpiar Datos</button>
+            <button onClick={()=>window.location.reload()} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Reiniciar</button>
           </div>
         </div>
       );
